@@ -1,6 +1,7 @@
 
 #set working directory
-setwd("C:/Users/Susan Coort/Documents/Papers/VitaminD_Chapter/Pathway_analysis")
+#select the correct path containing your input data
+setwd()
 
 #load required libraries
 library(dplyr)
@@ -24,8 +25,7 @@ library(RCy3)
 dataset.DC <- read.delim("DC_comp_Group_immature_vitD-Group_immature_control.txt")
 #mono read
 dataset.mono <- read.delim("monocyte_comp_Group__vitaminD-Group_control.txt")
-#THP1 read
-dataset.thp1 <- read.delim("THP1_comp_Group_Uninfected_treated_VitD-Group_Uninfected_untreated.txt")
+
 
 #get SYMBOL of each gene symbols for each disease type
 hs <- org.Hs.eg.db
@@ -40,42 +40,21 @@ Symbol.mono <- AnnotationDbi::select(hs,
                                    columns = c("SYMBOL", "ENTREZID"),
                                    keytype = "ENSEMBL")
 
-Symbol.thp1 <- AnnotationDbi::select(hs, 
-                                     keys = dataset.thp1$ENSG_ID,
-                                     columns = c("SYMBOL", "ENTREZID"),
-                                     keytype = "ENSEMBL")
-
 
 #filter out double gene symbols
 Symbol.DC<- Symbol.DC%>% distinct(Symbol.DC$ENSEMBL, .keep_all = TRUE)
 Symbol.mono<- Symbol.mono%>% distinct(Symbol.mono$ENSEMBL, .keep_all = TRUE)
-Symbol.thp1<- Symbol.thp1%>% distinct(Symbol.thp1$ENSEMBL, .keep_all = TRUE)
 
-#get back up data before starting
-#dataset.b  <- dataset.DC
-#dataset.b2 <- dataset.mono
 
-# add SYmbols to each dataset
+# add Symbols to each dataset
 dataset.DC <- cbind(Symbol.DC$SYMBOL, Symbol.DC$ENTREZID,dataset.DC)
 dataset.mono <- cbind(Symbol.mono$SYMBOL, Symbol.mono$ENTREZID,dataset.mono)
-dataset.thp1 <- cbind(Symbol.thp1$SYMBOL, Symbol.thp1$ENTREZID, dataset.thp1)
 
 #change column names
 colnames(dataset.DC)[1] <- "SYMBOL"
 colnames(dataset.DC)[2] <- "ENTREZID"
 colnames(dataset.mono)[1] <- "SYMBOL"
 colnames(dataset.mono)[2] <- "ENTREZID"
-colnames(dataset.thp1)[1] <- "SYMBOL"
-colnames(dataset.thp1)[2] <- "ENTREZID"
-
-
-
-# filter genes without Entrez Gene identifier
-#dataset.CD <- dataset.CD %>% tidyr::drop_na(ENTREZ.ID)
-#dataset.UC <- dataset.UC %>% tidyr::drop_na(ENTREZ.ID)
-#remove some unused columns
-#dataset.CD <- subset( dataset.CD, select = -c(3,5,6,7,9 ) )
-#dataset.UC <- subset( dataset.UC, select = -c(3,5,6,7,9 ) )
 
 #output folder should be created beforehand run the code
 png('output/volcanoplot_DC.png')
@@ -102,19 +81,6 @@ deg.mono <-unique(dataset.mono[!is.na(dataset.mono$adj.P.Val) & dataset.mono$adj
 mono.up   <-unique(dataset.mono[!is.na(dataset.mono$adj.P.Val) & dataset.mono$adj.P.Val < 0.05 & dataset.mono$logFC > 0.26 & dataset.mono$AveExpr > 4.7, c(1,2,3,4)])
 mono.down <-unique(dataset.mono[!is.na(dataset.mono$adj.P.Val) & dataset.mono$adj.P.Val < 0.05 & dataset.mono$logFC < -0.26 & dataset.mono$AveExpr > 4.7, c(1,2,3,4)])
 
-
-deg.thp1 <-unique(dataset.thp1[!is.na(dataset.thp1$adj.P.Val) & dataset.thp1$adj.P.Val < 0.05 & abs(dataset.thp1$logFC) > 0.26 & dataset.thp1$AveExpr > 4.25, c(1,2,3,4)])
-thp1.up   <-unique(dataset.thp1[!is.na(dataset.thp1$adj.P.Val) & dataset.thp1$adj.P.Val < 0.05 & dataset.thp1$logFC > 0.26 & dataset.thp1$AveExpr > 4.25, c(1,2,3,4)])
-thp1.down <-unique(dataset.thp1[!is.na(dataset.thp1$adj.P.Val) & dataset.thp1$adj.P.Val < 0.05 & dataset.thp1$logFC < -0.26 & dataset.thp1$AveExpr > 4.25, c(1,2,3,4)])
-
-venn.diagram(x = list(deg.DC$ENSG_ID, deg.mono$ENSG_ID, deg.thp1$ENSG_ID),
-             category.names = c("DC" ,"Mono", "THP-1"),
-             filename = 'output/venn_DEGs.png',
-             output=FALSE,
-             col=c("#440154ff","#440154ff", '#21908dff'),
-             fill = c(alpha("#440154ff",0.3),alpha("#440154ff",0.3), alpha('#21908dff',0.3)),
-             cex = 1.5,
-)
 
 ## Pathway enrichment analysis
 #We will perform pathway enrichment with the gene sets of all pathway models in WikiPathways (human only).
@@ -157,9 +123,6 @@ ggplot(ewp.DC[1:num.pathways.DC], aes(x=reorder(Description, -pvalue), y=Count))
 dev.off()
 write.table(ewp.DC.res, file="output/DC_enrich_res.txt", sep="\t", quote=FALSE, row.names = FALSE)
 
-# > Interpretation
-# - **Q5**: How many pathways are altered in the CD subtype and how do they link to 
-#IBD  (expected or unexpected)?
 
 ##################################FOR Monocytes ##############################################
 ewp.mono <- clusterProfiler::enricher(
@@ -188,42 +151,6 @@ ggplot(ewp.mono[1:num.pathways.mono], aes(x=reorder(Description, -pvalue), y=Cou
   theme(legend.position="none")
 dev.off()
 write.table(ewp.mono.res, file="output/Mono_enrich_res.txt", sep="\t", quote=FALSE, row.names = FALSE)
-
-
-
-##################################FOR THP1 ##############################################
-bkgd.genes <- unique(dataset.thp1[,c(1,2)])
-
-
-ewp.thp1 <- clusterProfiler::enricher(
-  deg.thp1$ENTREZID,
-  universe = bkgd.genes$ENTREZID,
-  pAdjustMethod = "fdr",
-  pvalueCutoff = 0.05,
-  qvalueCutoff = 0.02,
-  TERM2GENE = wpid2gene,
-  TERM2NAME = wpid2name)
-ewp.thp1.res <- as.data.frame(ewp.thp1) 
-
-# number of genes measured in pathways
-length(ewp.thp1@universe)
-# number of DEG in pathways
-length(deg.thp1$ENTREZID[deg.thp1$ENTREZID %in% unique(wp2gene$gene)])
-num.pathways.thp1 <- dim(ewp.thp1.res)[1]
-
-# export enrichment result
-png('output/THP1_barplot.png', width = 1500, height=1000)
-ggplot(ewp.thp1[1:num.pathways.thp1], aes(x=reorder(Description, -pvalue), y=Count)) +
-  geom_bar(stat ="identity", fill="#440154ff") +
-  coord_flip() +
-  labs(x="", y="THP-1 DEG gene count", fill="") +
-  theme(axis.text=element_text(size=15)) + 
-  theme(legend.position="none")
-dev.off()
-write.table(ewp.thp1.res, file="output/THP1_enrich_res.txt", sep="\t", quote=FALSE, row.names = FALSE)
-
-
-
 
 #############Pathway visualization##############
 # The pathways can then be visualized with the gene expression data as shown with the 
